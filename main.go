@@ -2,12 +2,12 @@ package data
 
 import (
 	"database/sql"
-	"demo/src/tools"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jinzhu/gorm"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/qingfenghuohu/config"
+	"github.com/qingfenghuohu/tools"
 	"reflect"
 	"strconv"
 	"strings"

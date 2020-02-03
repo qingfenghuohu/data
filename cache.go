@@ -1,8 +1,8 @@
 package data
 
 import (
-	"demo/src/tools/redis"
 	"encoding/json"
+	"github.com/qingfenghuohu/tools/redis"
 	"strconv"
 	"strings"
 )
