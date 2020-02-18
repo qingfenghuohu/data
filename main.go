@@ -350,6 +350,7 @@ func (m *m) Select() []map[string]interface{} {
 	m.InitField()
 	rows, err := tx.Select(m.field).Rows()
 	if err != nil {
+		fmt.Println(m.modelInfo.DbName() + "." + m.modelInfo.TableName())
 		panic(err.Error())
 	}
 	columns, err := rows.Columns()
