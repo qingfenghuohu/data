@@ -432,14 +432,17 @@ func (m *m) whereExec(tx *gorm.DB) *gorm.DB {
 	if m.groupBy != "" {
 		tx = tx.Group(m.groupBy)
 	}
-	fmt.Println("m.page", m.page)
+	if m.orderBy != "" {
+		tx = tx.Order(m.orderBy)
+	}
 	if m.page.page > 0 {
 		start := (m.page.page - 1) * m.page.size
-		tx.Offset(start)
-		tx.Limit(m.page.size)
+		fmt.Println("m.page", m.page, "start", start)
+		tx = tx.Offset(start)
+		tx = tx.Limit(m.page.size)
 	}
 	if m.limit > 0 {
-		tx.Limit(m.page.size)
+		tx = tx.Limit(m.page.size)
 	}
 	return tx
 }
