@@ -432,6 +432,7 @@ func (m *m) whereExec(tx *gorm.DB) *gorm.DB {
 	if m.groupBy != "" {
 		tx = tx.Group(m.groupBy)
 	}
+	fmt.Println(m.page)
 	if m.page.page > 0 {
 		start := (m.page.page - 1) * m.page.size
 		tx.Offset(start)
