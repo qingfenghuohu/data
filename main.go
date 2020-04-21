@@ -5,6 +5,7 @@ import (
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jinzhu/gorm"
+	"github.com/json-iterator/go"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/qingfenghuohu/config"
 	"github.com/qingfenghuohu/tools"
@@ -238,7 +239,6 @@ func (m *m) Save(data interface{}) bool {
 	m.where = tmpWhere
 	result := m.connMaster().Model(m.modelInfo).Where(m.where.w, m.where.p...).Updates(data).RowsAffected
 	m.clear()
-
 	if result > 0 {
 		mData := Struct2Map(data)
 		for _, v := range beData {
@@ -253,8 +253,6 @@ func (m *m) Save(data interface{}) bool {
 			reData = append(reData, tmpData)
 		}
 		SaveCache(beData, reData, m.modelInfo)
-		//fmt.Println("beData",beData)
-		//fmt.Println("reData",reData)
 		return true
 	} else {
 		return false
@@ -287,8 +285,6 @@ func (m *m) IncrSets(field string, number int, field2 string, number2 int) bool 
 			reData = append(reData, tmpData)
 		}
 		SaveCache(beData, reData, m.modelInfo)
-		//fmt.Println("beData",beData)
-		//fmt.Println("reData",reData)
 		return true
 	} else {
 		return false
@@ -507,13 +503,12 @@ func typeof(v interface{}) string {
 	return fmt.Sprintf("%T", v)
 }
 
-func Struct2Map(obj interface{}) map[string]interface{} {
-	t := reflect.TypeOf(obj).Elem()
-	v := reflect.ValueOf(obj).Elem()
-
-	var data = make(map[string]interface{})
-	for i := 0; i < t.NumField(); i++ {
-		data[t.Field(i).Name] = v.Field(i).String()
-	}
-	return data
+func Struct2Map(m interface{}) map[string]string {
+	var result map[string]string
+	json := jsoniter.ConfigCompatibleWithStandardLibrary
+	data, _ := json.Marshal(m)
+	reader := strings.NewReader(string(data))
+	decoder := json.NewDecoder(reader)
+	decoder.Decode(&result)
+	return result
 }

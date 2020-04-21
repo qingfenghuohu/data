@@ -259,7 +259,7 @@ func SaveCache(beData []map[string]interface{}, Data []map[string]interface{}, m
 	field := Model(m).InitField().pk
 	dataCacheKey := m.GetDataCacheKey()
 	dataCacheKeyList := make(map[string][]DataCacheKey)
-	//fmt.Println(dataCacheKey)
+	//fmt.Println("data.cache",dataCacheKey)
 	for _, v := range Data {
 		for confType, confVal := range dataCacheKey {
 			if ok := dataCacheKeyList[confType]; len(ok) == 0 {
