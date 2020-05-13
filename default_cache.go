@@ -2,11 +2,11 @@ package data
 
 import "github.com/qingfenghuohu/tools/redis"
 
-type IReal struct {
+type Real struct {
 	dck []DataCacheKey
 }
 
-func (real *IReal) SetCacheData(rcd []RealCacheData) {
+func (real *Real) SetCacheData(rcd []RealCacheData) {
 	CacheData := map[string][]interface{}{}
 	Keys := map[string]map[int64][]string{}
 	for _, v := range rcd {
@@ -28,7 +28,8 @@ func (real *IReal) SetCacheData(rcd []RealCacheData) {
 		}
 	}
 }
-func (real *IReal) GetCacheData(res *Result) {
+
+func (real *Real) GetCacheData(res *Result) {
 	Keys := map[string][]string{}
 	for _, v := range real.dck {
 		if len(Keys[v.ConfigName]) == 0 {
@@ -43,31 +44,16 @@ func (real *IReal) GetCacheData(res *Result) {
 		}
 	}
 }
-func (real *IReal) GetRealData() []RealCacheData {
+
+func (real *Real) GetRealData() []RealCacheData {
 	var result []RealCacheData
-	dataCacheKey := map[string]map[string][]DataCacheKey{}
-	models := map[string]ModelInfo{}
-	for _, v := range real.dck {
-		TableName := v.Model.DbName() + "." + v.Model.TableName()
-		if len(dataCacheKey[TableName]) == 0 {
-			dataCacheKey[TableName] = map[string][]DataCacheKey{}
-		}
-		if len(dataCacheKey[TableName][v.Key]) == 0 {
-			dataCacheKey[TableName][v.Key] = []DataCacheKey{}
-		}
-		dataCacheKey[TableName][v.Key] = append(dataCacheKey[TableName][v.Key], v)
-		models[TableName] = v.Model
-	}
-	for key, val := range dataCacheKey {
-		tmp := models[key].GetRealData(val)
-		result = append(result, tmp...)
-	}
 	return result
 }
-func (real *IReal) SetDataCacheKey(dck []DataCacheKey) {
+
+func (real *Real) SetDataCacheKey(dck []DataCacheKey) {
 	real.dck = RemoveDuplicateElement(dck)
 }
-func (real *IReal) DelCacheData() {
+func (real *Real) DelCacheData() {
 	keys := map[string][]interface{}{}
 	for _, v := range real.dck {
 		if len(keys[v.ConfigName]) == 0 {

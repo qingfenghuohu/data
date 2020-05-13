@@ -1,10 +1,9 @@
 package data
 
 import (
-	"encoding/json"
-	"github.com/qingfenghuohu/tools/redis"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 const (
@@ -15,6 +14,14 @@ const (
 	DataCacheTypeTotal    = "tot"
 	DataCacheTypeList     = "list"
 )
+
+type Cache interface {
+	SetCacheData(rcd []RealCacheData)
+	GetCacheData(res *Result)
+	GetRealData() []RealCacheData
+	SetDataCacheKey(dck []DataCacheKey)
+	DelCacheData()
+}
 
 type DataCacheKey struct {
 	Key        string
@@ -31,323 +38,231 @@ type DataCacheKey struct {
 	Data       interface{}
 }
 
-type CacheKey struct {
-	Config map[int]DataCacheKey
+type ListDataCacheKey struct {
+	data []DataCacheKey
 }
 
 type RealCacheData struct {
 	Result   interface{}
 	CacheKey DataCacheKey
 }
-type CacheTime struct {
-	time   int64
-	keys   []string
-	config string
+type RealData struct {
+	Data      []RealCacheData
+	Sync      sync.Mutex
+	WaitGroup sync.WaitGroup
 }
 
-func ReBuild(resetKey map[string][]DataCacheKey, result map[string]interface{}) {
-	dbData := map[string][]RealCacheData{}
+func ReBuild(resetKey []DataCacheKey) []RealCacheData {
+	var result RealData
+	typeResetKey := GetTypeDataCacheKey(resetKey)
 	//获取真实数据
-	for cacheType, confVal := range resetKey {
-		if ok := dbData[cacheType]; len(ok) == 0 {
-			dbData[cacheType] = []RealCacheData{}
-		}
-		switch cacheType {
-		case DataCacheTypeIds:
-			dbData[cacheType] = IdRealData(confVal, dbData[cacheType])
-			break
-		case DataCacheTypeRelation:
-			dbData[cacheType] = RelRealData(confVal, dbData[cacheType])
-			break
-		case DataCacheTypeI:
-			dbData[cacheType] = IRealData(confVal, dbData[cacheType])
-			break
-		case DataCacheTypeIs:
-			break
-		case DataCacheTypeList:
-			break
-		case DataCacheTypeTotal:
-			break
-		}
+	for key, val := range typeResetKey {
+		result.Add()
+		go func() {
+			rc := RunCache(key)
+			rc.SetDataCacheKey(val)
+			RealCacheData := rc.GetRealData()
+			rc.SetCacheData(RealCacheData)
+			result.append(RealCacheData...)
+		}()
 	}
-	//设置缓存
-	SetCacheData(dbData)
-	//拼装真实数据及缓存数据
-	for _, v := range dbData {
-		for _, vv := range v {
-			result[CreateCacheKeyStr(vv.CacheKey)] = vv.Result
-		}
-	}
-	//fmt.Println(result)
-
+	result.Wait()
+	return result.Data
 }
-func getCache(realKey *map[string]map[string]DataCacheKey) map[string]interface{} {
-	result := make(map[string]interface{})
-	getCacheConfig := make(map[string]DataCacheKey)
-	for cacheType, confVal := range *realKey {
-		switch cacheType {
-		default:
-			for k, v := range confVal {
-				getCacheConfig[k] = v
-			}
-			break
+
+func getCache(configKey []DataCacheKey) (Result, []DataCacheKey) {
+	var result Result
+	var defect []DataCacheKey
+	dataCacheKey := GetTypeDataCacheKey(configKey)
+	for key, val := range dataCacheKey {
+		result.Add()
+		go func() {
+			rc := RunCache(key)
+			rc.SetDataCacheKey(val)
+			rc.GetCacheData(&result)
+			result.Done()
+		}()
+	}
+	result.Wait()
+	for _, v := range configKey {
+		if result.read(v.String()) == nil {
+			defect = append(defect, v)
 		}
 	}
-	//fmt.Println("getCacheConfig", getCacheConfig)
-	GetCacheData(getCacheConfig, result)
+	return result, defect
+}
 
+func RunCache(key string) Cache {
+	var result Cache
+	switch key {
+	case DataCacheTypeList:
+		result = &ListReal{}
+		break
+	case DataCacheTypeRelation:
+		result = &RelReal{}
+		break
+	case DataCacheTypeIds:
+		result = &IdReal{}
+		break
+	case DataCacheTypeIs:
+		result = &IsReal{}
+		break
+	case DataCacheTypeTotal:
+		break
+	case DataCacheTypeI:
+		result = &IReal{}
+		break
+	default:
+		result = &Real{}
+		break
+	}
 	return result
 }
-func GetCacheData(confValue map[string]DataCacheKey, result map[string]interface{}) {
-	cacheKey := make(map[string][]string)
-	for i, v := range confValue {
-		if ok := cacheKey[v.ConfigName]; ok == nil {
-			cacheKey[v.ConfigName] = []string{}
-		}
-		cacheKey[v.ConfigName] = append(cacheKey[v.ConfigName], i)
-	}
 
-	for i, v := range cacheKey {
-		cacheRes := redis.GetInstance(i).MGet(v...)
-		if len(cacheRes) > 0 {
-			for ii, vv := range cacheRes {
-				if vv != nil {
-					m := make(map[string]interface{})
-					b := []byte(vv.(string))
-					err := json.Unmarshal(b, &m)
-					if err == nil {
-						result[ii] = m
-					} else {
-						mm := []map[string]interface{}{}
-						err = json.Unmarshal(b, &mm)
-						if err == nil {
-							result[ii] = mm
-						}
-					}
-				}
-			}
-		}
-	}
-}
-func SetCacheData(dbData map[string][]RealCacheData) {
-	data := make(map[string][]interface{})
-	ct := map[string][]string{}
-	setData := []RealCacheData{}
-	for key, val := range dbData {
-		switch key {
-		//case DataCacheTypeIds:
-		//	break
-		default:
-			setData = append(setData, val...)
-			break
-		}
-	}
-	for _, v := range setData {
-		if ok := data[v.CacheKey.ConfigName]; len(ok) == 1 {
-			data[v.CacheKey.ConfigName] = []interface{}{}
-		}
-		kk := v.CacheKey.ConfigName + "|-|" + strconv.Itoa(v.CacheKey.LifeTime)
-		if ok := ct[kk]; len(ok) <= 0 {
-			ct[kk] = []string{}
-		}
-		ct[kk] = append(ct[kk], CreateCacheKeyStr(v.CacheKey))
-		data[v.CacheKey.ConfigName] = append(data[v.CacheKey.ConfigName], CreateCacheKeyStr(v.CacheKey))
-		data[v.CacheKey.ConfigName] = append(data[v.CacheKey.ConfigName], v.Result)
-	}
-
-	for i, v := range data {
-		redis.GetInstance(i).MSet(v...)
-		//fmt.Println("SetCacheData", flag)
-
-	}
-
-	for i, v := range ct {
-		redisConfig := strings.Split(i, "|-|")
-		time, _ := strconv.ParseInt(redisConfig[1], 10, 64)
-		host := redisConfig[0]
-		redis.GetInstance(host).Expire(time, v...)
-	}
-}
-func DelCacheData(data map[string][]DataCacheKey) {
-	result := make(map[string][]interface{})
-	for k, v := range data {
-		switch k {
-		default:
-			for _, vv := range v {
-				if ok := result[vv.ConfigName]; len(ok) == 0 {
-					result[vv.ConfigName] = []interface{}{}
-				}
-				result[vv.ConfigName] = append(result[vv.ConfigName], CreateCacheKeyStr(vv))
-			}
-			for i, v := range result {
-				redis.GetInstance(i).Delete(v...)
-			}
-			break
-		}
-	}
-
-}
 func CreateDataCacheKey(m ModelInfo, key string, p ...string) DataCacheKey {
 	result := Model(m).modelInfo.GetDataCacheKey()[key]
 	result.Params = p
 	return result
 }
 
-func GetData(configKey *[]DataCacheKey) map[string]interface{} {
-	realKey := AnalysisCacheKey(configKey)
+func GetData(configKey []DataCacheKey) map[string]interface{} {
+	configKey = RemoveDuplicateElement(configKey)
 	//获取全部缓存数据
-	AllData := getCache(&realKey)
-	//获取需要重建key
-	resetKey := make(map[string][]DataCacheKey)
-	for _, v := range *configKey {
-		tmpKey := CreateCacheKeyStr(v)
-		if ok := AllData[tmpKey]; ok == nil {
-			if ok2 := resetKey[v.CType]; ok2 == nil {
-				resetKey[v.CType] = []DataCacheKey{}
-			}
-			resetKey[v.CType] = append(resetKey[v.CType], v)
-		}
-	}
+	AllData, resetKey := getCache(configKey)
 	//重置缓存数据
 	if len(resetKey) > 0 {
-		ReBuild(resetKey, AllData)
-	}
-	//fmt.Println("AllData", AllData)
-	return AllData
-}
-
-func AnalysisCacheKey(configKey *[]DataCacheKey) map[string]map[string]DataCacheKey {
-	realKey := make(map[string]map[string]DataCacheKey)
-	for _, v := range *configKey {
-		if v.Model != nil {
-			tmpKey := CreateCacheKeyStr(v)
-			if ok := realKey[v.CType]; len(ok) == 0 {
-				realKey[v.CType] = make(map[string]DataCacheKey)
-			}
-			realKey[v.CType][tmpKey] = v
+		RealCacheData := ReBuild(resetKey)
+		for _, v := range RealCacheData {
+			AllData.write(v.CacheKey.String(), v.Result)
 		}
 	}
-	return realKey
+	return AllData.Map()
 }
 
 func CreateCacheKeyStr(dck DataCacheKey) string {
-	tmpParam := strings.Join(dck.Params, "_")
-
-	result := []string{}
-	result = append(result, strconv.Itoa(dck.Version))
-	result = append(result, dck.CType)
-	result = append(result, dck.Model.DbName()+"."+dck.Model.TableName())
-	result = append(result, dck.Key)
-
-	result = append(result, tmpParam)
-	return strings.Join(result, ":")
+	return strconv.Itoa(dck.Version) + ":" +
+		dck.CType + ":" +
+		dck.Model.DbName() + "." + dck.Model.TableName() + ":" +
+		dck.Key + ":" +
+		strings.Join(dck.Params, "_")
 }
 
 func SaveCache(beData []map[string]interface{}, Data []map[string]interface{}, m ModelInfo) {
-	saveCacheData := make(map[string][]RealCacheData)
-	delCacheData := make(map[string][]DataCacheKey)
-	tmpCache := m.DbToCache(Data, beData)
-	for _, v := range tmpCache {
-		if v.CacheKey.ResetType == 0 {
-			saveCacheData["default"] = append(saveCacheData["default"], v)
+	var dataCacheKey []DataCacheKey
+	var saveDataCacheKey []DataCacheKey
+	var delDataCacheKey []DataCacheKey
+	var tmp []DataCacheKey
+	tmp = DbDataToCacheKey(Data, beData, m)
+	dataCacheKey = append(dataCacheKey, tmp...)
+
+	for _, v := range dataCacheKey {
+		if v.ResetType == 1 {
+			saveDataCacheKey = append(saveDataCacheKey, v)
 		}
-		if v.CacheKey.ResetType == 1 {
-			delCacheData["default"] = append(delCacheData["default"], v.CacheKey)
+		if v.ResetType == 0 {
+			delDataCacheKey = append(delDataCacheKey, v)
 		}
 	}
+	ReBuild(saveDataCacheKey)
 
+	typeDataCacheKey := GetTypeDataCacheKey(delDataCacheKey)
+	for key, val := range typeDataCacheKey {
+		rc := RunCache(key)
+		rc.SetDataCacheKey(val)
+		rc.DelCacheData()
+	}
+}
+
+func DelCache(Data []map[string]interface{}, m ModelInfo) {
+	var dataCacheKey []DataCacheKey
+	tmp := DbDataToCacheKey(Data, m)
+	dataCacheKey = append(dataCacheKey, tmp...)
+	dataCacheKey = RemoveDuplicateElement(dataCacheKey)
+	typeDataCacheKey := GetTypeDataCacheKey(dataCacheKey)
+	for key, val := range typeDataCacheKey {
+		rc := RunCache(key)
+		rc.SetDataCacheKey(val)
+		rc.DelCacheData()
+	}
+}
+
+func DbDataToCacheKey(Data []map[string]interface{}, beData []map[string]interface{}, m ModelInfo) []DataCacheKey {
+	var result []DataCacheKey
 	field := Model(m).InitField().pk
 	dataCacheKey := m.GetDataCacheKey()
-	dataCacheKeyList := make(map[string][]DataCacheKey)
-	//fmt.Println("data.cache",dataCacheKey)
 	for _, v := range Data {
-		for confType, confVal := range dataCacheKey {
-			if ok := dataCacheKeyList[confType]; len(ok) == 0 {
-				dataCacheKeyList[confType] = []DataCacheKey{}
-			}
+		for _, confVal := range dataCacheKey {
 			switch confVal.CType {
 			case DataCacheTypeIds:
-				if ok2 := dataCacheKeyList[confType]; len(ok2) == 0 {
-					dataCacheKeyList[confType] = []DataCacheKey{}
-				}
 				confVal.Params = []string{v[field].(string)}
-				if confVal.ResetType == 1 {
-					saveCacheData[DataCacheTypeIds] = append(saveCacheData[DataCacheTypeIds], RealCacheData{Result: v, CacheKey: confVal})
-				}
-				if confVal.ResetType == 0 {
-					delCacheData[DataCacheTypeIds] = append(delCacheData[DataCacheTypeIds], confVal)
-				}
+				result = append(result, confVal)
 				break
 			case DataCacheTypeRelation:
-				f := confVal.RelField[0]
-				confVal.Params = []string{v[f].(string)}
-				if confVal.ResetType == 1 {
-					saveCacheData[DataCacheTypeRelation] = append(saveCacheData[DataCacheTypeRelation], RealCacheData{Result: v, CacheKey: confVal})
+				tmp := []string{}
+				for _, val := range confVal.RelField {
+					if v[val].(string) != "" {
+						tmp = append(tmp, v[val].(string))
+					}
 				}
-				if confVal.ResetType == 0 {
-					delCacheData[DataCacheTypeRelation] = append(delCacheData[DataCacheTypeRelation], confVal)
-				}
+				confVal.Params = tmp
+				result = append(result, confVal)
 				break
-			case DataCacheTypeI:
-				if confVal.ResetType == 1 {
-					saveCacheData[DataCacheTypeI] = m.DbToCache(Data, beData)
+			case DataCacheTypeList:
+				tmp := []string{}
+				for _, val := range confVal.RelField {
+					if v[val].(string) != "" {
+						tmp = append(tmp, v[val].(string))
+					}
 				}
-				if confVal.ResetType == 0 {
-					delCacheData[DataCacheTypeI] = m.DbToCacheKey(Data, beData)
-				}
+				confVal.Params = tmp
+				result = append(result, confVal)
 				break
-			}
-		}
-	}
-	SetCacheData(saveCacheData)
-	DelCacheData(delCacheData)
-}
-func DelCache(beData []map[string]interface{}, m ModelInfo) {
-	dataCacheKeyList := createDataCacheKeyList(beData, m)
-	DelCacheData(dataCacheKeyList)
-}
-
-func createDataCacheKeyList(data []map[string]interface{}, m ModelInfo) map[string][]DataCacheKey {
-	dataCacheKeyList := make(map[string][]DataCacheKey)
-	dataCacheKey := m.GetDataCacheKey()
-	field := Model(m).InitField().pk
-	for _, v := range data {
-		for confType, confVal := range dataCacheKey {
-			if ok := dataCacheKeyList[confType]; len(ok) == 0 {
-				dataCacheKeyList[confType] = []DataCacheKey{}
-			}
-			switch confVal.CType {
-			case DataCacheTypeIds:
-				if ok2 := dataCacheKeyList[confType]; len(ok2) == 0 {
-					dataCacheKeyList[confType] = []DataCacheKey{}
-				}
-				confVal.Params = []string{v[field].(string)}
-				dataCacheKeyList[confType] = append(dataCacheKeyList[confType], confVal)
-				break
-			case DataCacheTypeRelation:
-				break
-			case DataCacheTypeI:
+			default:
+				tmp1 := m.DbToCacheKey(Data, beData)
+				result = append(result, tmp1...)
 				break
 			}
 
 		}
 	}
-	return dataCacheKeyList
+	return result
 }
 
-func FormatIDCackey(dataCacheKey map[string][]DataCacheKey) (map[string]DataCacheKey, map[string][]interface{}, map[string]interface{}) {
-	realKey := make(map[string]DataCacheKey)
-	realKeyParams := make(map[string][]interface{})
-	result := map[string]interface{}{}
-	for _, value := range dataCacheKey {
-		realKey[value[0].Key] = value[0]
-		for _, v := range value {
-			if ok := realKeyParams[v.Key]; len(ok) == 0 {
-				realKeyParams[v.Key] = []interface{}{}
-			}
-			realKeyParams[v.Key] = append(realKeyParams[v.Key], v.Params)
-			result[CreateCacheKeyStr(v)] = nil
-		}
-	}
-	return realKey, realKeyParams, result
+func (dck *DataCacheKey) String() string {
+	return strconv.Itoa(dck.Version) + ":" +
+		dck.CType + ":" +
+		dck.Model.DbName() + "." + dck.Model.TableName() + ":" +
+		dck.Key + ":" +
+		strings.Join(dck.Params, "_")
+}
+
+func (rd *RealData) append(data ...RealCacheData) {
+	rd.Sync.Lock()
+	rd.Data = append(rd.Data, data...)
+	rd.Sync.Unlock()
+}
+func (rd *RealData) Add() {
+	rd.WaitGroup.Add(1)
+}
+
+func (rd *RealData) Done() {
+	rd.WaitGroup.Done()
+}
+
+func (rd *RealData) Wait() {
+	rd.WaitGroup.Wait()
+}
+
+func Run() *ListDataCacheKey {
+	result := ListDataCacheKey{}
+	return &result
+}
+
+func (ld *ListDataCacheKey) Add(model ModelInfo, key string, params ...string) *ListDataCacheKey {
+	ld.data = append(ld.data, CreateDataCacheKey(model, key, params...))
+	return ld
+}
+
+func (ld *ListDataCacheKey) GetData() map[string]interface{} {
+	return GetData(ld.data)
 }

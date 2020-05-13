@@ -5,11 +5,11 @@ import (
 	"strings"
 )
 
-type IdReal struct {
+type ListReal struct {
 	dck []DataCacheKey
 }
 
-func (real *IdReal) SetCacheData(rcd []RealCacheData) {
+func (real *ListReal) SetCacheData(rcd []RealCacheData) {
 	CacheData := map[string][]interface{}{}
 	Keys := map[string]map[int64][]string{}
 	for _, v := range rcd {
@@ -31,7 +31,7 @@ func (real *IdReal) SetCacheData(rcd []RealCacheData) {
 		}
 	}
 }
-func (real *IdReal) GetCacheData(res *Result) {
+func (real *ListReal) GetCacheData(res *Result) {
 	Keys := map[string][]string{}
 	for _, v := range real.dck {
 		if len(Keys[v.ConfigName]) == 0 {
@@ -46,49 +46,45 @@ func (real *IdReal) GetCacheData(res *Result) {
 		}
 	}
 }
-func (real *IdReal) GetRealData() []RealCacheData {
+func (real *ListReal) GetRealData() []RealCacheData {
 	var result []RealCacheData
-	realData := make(map[string]DataCacheKey)
-	realParams := make(map[string][]string)
+	realData := make(map[string]map[string][]DataCacheKey)
 	for _, v := range real.dck {
 		tmpKey := v.Model.DbName() + "_" + v.Model.TableName()
-		if ok := realData[tmpKey]; ok.CType == "" {
-			realData[tmpKey] = v
-			realParams[tmpKey] = []string{}
+		if ok := realData[tmpKey]; len(ok) <= 0 {
+			realData[tmpKey] = map[string][]DataCacheKey{}
 		}
-		if v.Params[0] != "" {
-			realParams[tmpKey] = append(realParams[tmpKey], v.Params[0])
+		if ok := realData[tmpKey][v.Key]; len(ok) <= 0 {
+			realData[tmpKey][v.Key] = []DataCacheKey{}
 		}
+		realData[tmpKey][v.Key] = append(realData[tmpKey][v.Key], v)
 	}
-	for i, v := range realData {
-		param := strings.Join(realParams[i], ",")
-		m := Model(v.Model).InitField()
-		if m.pk == "" {
-			m.pk = "Id"
-		}
-		if m.pkMysql == "" {
-			m.pkMysql = "id"
-		}
-		res := Model(v.Model).Where(m.pkMysql + " in(" + param + ")").Select()
-		for _, vv := range res {
-			v.Params = []string{vv[m.pk].(string)}
-			result = append(result, RealCacheData{CacheKey: v, Result: vv})
+
+	for _, value := range realData {
+		for _, val := range value {
+			for _, v := range val {
+				Condition := []string{}
+				WhereVal := []interface{}{}
+				for i, p := range v.Params {
+					if p != "" {
+						WhereVal = append(WhereVal, p)
+						Condition = append(Condition, v.RelField[i]+" = ? ")
+					}
+				}
+				WhereCondition := strings.Join(Condition, " and ")
+				if len(Condition) > 0 && len(WhereVal) > 0 {
+					tmp := Model(v.Model).Where(WhereCondition, WhereVal...).Select()
+					result = append(result, RealCacheData{CacheKey: v, Result: tmp})
+				} else {
+					result = append(result, RealCacheData{CacheKey: v, Result: nil})
+				}
+			}
 		}
 	}
 	return result
 }
-func (real *IdReal) SetDataCacheKey(dck []DataCacheKey) {
-	real.dck = RemoveDuplicateElement(dck)
+func (real *ListReal) SetDataCacheKey(dck []DataCacheKey) {
+	real.dck = dck
 }
-func (real *IdReal) DelCacheData() {
-	keys := map[string][]interface{}{}
-	for _, v := range real.dck {
-		if len(keys[v.ConfigName]) == 0 {
-			keys[v.ConfigName] = []interface{}{}
-		}
-		keys[v.ConfigName] = append(keys[v.ConfigName], v.String())
-	}
-	for key, val := range keys {
-		redis.GetInstance(key).Delete(val...)
-	}
+func (real *ListReal) DelCacheData() {
 }

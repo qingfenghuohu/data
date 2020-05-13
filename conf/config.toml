@@ -1,0 +1,30 @@
+[database]
+    [database.third]
+        [database.third.master]
+            url = "root:root@tcp(localhost:3307)/third?charset=utf8&parseTime=True&loc=Local"
+            type = "mysql"
+            idleNum = "1"
+            openNum = "10"
+            debug = true
+        [database.third.slave]
+            url = [
+                "root:root@tcp(localhost:3307)/third?charset=utf8&parseTime=True&loc=Local"
+            ]
+            type = "mysql"
+            idleNum = "3"
+            openNum = "10"
+            debug = true
+[cache]
+    [cache.redis]
+        [cache.redis.third]
+            host = "127.0.0.1"
+            pwd = ""
+            ttl = "30"
+            db = "4"
+            port = "6379"
+        [cache.redis.tool]
+            host = "127.0.0.1"
+            pwd = ""
+            ttl = "30"
+            db = "6"
+            port = "6379"

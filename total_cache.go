@@ -2,11 +2,11 @@ package data
 
 import "github.com/qingfenghuohu/tools/redis"
 
-type IReal struct {
+type TotalReal struct {
 	dck []DataCacheKey
 }
 
-func (real *IReal) SetCacheData(rcd []RealCacheData) {
+func (real *TotalReal) SetCacheData(rcd []RealCacheData) {
 	CacheData := map[string][]interface{}{}
 	Keys := map[string]map[int64][]string{}
 	for _, v := range rcd {
@@ -28,7 +28,7 @@ func (real *IReal) SetCacheData(rcd []RealCacheData) {
 		}
 	}
 }
-func (real *IReal) GetCacheData(res *Result) {
+func (real *TotalReal) GetCacheData(res *Result) {
 	Keys := map[string][]string{}
 	for _, v := range real.dck {
 		if len(Keys[v.ConfigName]) == 0 {
@@ -43,7 +43,7 @@ func (real *IReal) GetCacheData(res *Result) {
 		}
 	}
 }
-func (real *IReal) GetRealData() []RealCacheData {
+func (real *TotalReal) GetRealData() []RealCacheData {
 	var result []RealCacheData
 	dataCacheKey := map[string]map[string][]DataCacheKey{}
 	models := map[string]ModelInfo{}
@@ -64,10 +64,10 @@ func (real *IReal) GetRealData() []RealCacheData {
 	}
 	return result
 }
-func (real *IReal) SetDataCacheKey(dck []DataCacheKey) {
+func (real *TotalReal) SetDataCacheKey(dck []DataCacheKey) {
 	real.dck = RemoveDuplicateElement(dck)
 }
-func (real *IReal) DelCacheData() {
+func (real *TotalReal) DelCacheData() {
 	keys := map[string][]interface{}{}
 	for _, v := range real.dck {
 		if len(keys[v.ConfigName]) == 0 {

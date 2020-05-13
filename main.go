@@ -18,11 +18,12 @@ import (
 type ModelInfo interface {
 	TableName() string
 	DbName() string
-	GetRealData(dataCacheKey map[string][]DataCacheKey) map[string]interface{}
+	GetRealData(dataCacheKey map[string][]DataCacheKey) []RealCacheData
 	GetDataCacheKey() map[string]DataCacheKey
-	DbToCache(dbData []map[string]interface{}, beData []map[string]interface{}) []RealCacheData
-	DbToCacheKey(dbData []map[string]interface{}, beData []map[string]interface{}) []DataCacheKey
+	DbToCache(dbData []map[string]interface{}, beData []map[string]interface{}, operation string) []RealCacheData
+	DbToCacheKey(dbData []map[string]interface{}, beData []map[string]interface{}, operation string) []DataCacheKey
 }
+
 type m struct {
 	fieldMysql  map[string]string
 	fieldStruct map[string]string
@@ -225,7 +226,7 @@ func (m *m) Add(data interface{}) int {
 	id, _ = strconv.Atoi(mData[m.pk].(string))
 	if id > 0 {
 		result = append(result, mData)
-		SaveCache(result, result, m.modelInfo)
+		SaveCache([]map[string]interface{}{}, result, m.modelInfo)
 	}
 	return id
 }
@@ -299,10 +300,8 @@ func (m *m) DecrSet(field string, number int) bool {
 	beData := m.Select()
 	reData := []map[string]interface{}{}
 	m.where = tmpWhere
-
 	result := m.connMaster().Model(m.modelInfo).Where(m.where.w, m.where.p...).UpdateColumn(field, gorm.Expr(field+" - ?", number)).RowsAffected
 	m.clear()
-
 	if result > 0 {
 		for _, v := range beData {
 			tmpData := make(map[string]interface{})
@@ -316,8 +315,6 @@ func (m *m) DecrSet(field string, number int) bool {
 			reData = append(reData, tmpData)
 		}
 		SaveCache(beData, reData, m.modelInfo)
-		//fmt.Println("beData",beData)
-		//fmt.Println("reData",reData)
 		return true
 	} else {
 		return false
