@@ -7,12 +7,12 @@ import (
 )
 
 const (
-	DataCacheTypeIds      = "id"
-	DataCacheTypeRelation = "rel"
-	DataCacheTypeI        = "i"
-	DataCacheTypeIs       = "is"
-	DataCacheTypeTotal    = "tot"
-	DataCacheTypeList     = "list"
+	CacheTypeIds       = "id"
+	CacheTypeRelation  = "rel"
+	CacheTypeI         = "i"
+	CacheTypeField     = "f"
+	CacheTypeTotal     = "t"
+	CacheTypeFieldList = "fl"
 )
 
 type Cache interface {
@@ -95,21 +95,21 @@ func getCache(configKey []DataCacheKey) (Result, []DataCacheKey) {
 func RunCache(key string) Cache {
 	var result Cache
 	switch key {
-	case DataCacheTypeList:
-		result = &ListReal{}
+	case CacheTypeFieldList:
+		result = &FieldListReal{}
 		break
-	case DataCacheTypeRelation:
+	case CacheTypeRelation:
 		result = &RelReal{}
 		break
-	case DataCacheTypeIds:
+	case CacheTypeIds:
 		result = &IdReal{}
 		break
-	case DataCacheTypeIs:
-		result = &IsReal{}
+	case CacheTypeField:
+		result = &FieldReal{}
 		break
-	case DataCacheTypeTotal:
+	case CacheTypeTotal:
 		break
-	case DataCacheTypeI:
+	case CacheTypeI:
 		result = &IReal{}
 		break
 	default:
@@ -193,11 +193,11 @@ func DbDataToCacheKey(Data []map[string]interface{}, beData []map[string]interfa
 	for _, v := range Data {
 		for _, confVal := range dataCacheKey {
 			switch confVal.CType {
-			case DataCacheTypeIds:
+			case CacheTypeIds:
 				confVal.Params = []string{v[field].(string)}
 				result = append(result, confVal)
 				break
-			case DataCacheTypeRelation:
+			case CacheTypeRelation:
 				tmp := []string{}
 				for _, val := range confVal.RelField {
 					if v[val].(string) != "" {
@@ -207,7 +207,7 @@ func DbDataToCacheKey(Data []map[string]interface{}, beData []map[string]interfa
 				confVal.Params = tmp
 				result = append(result, confVal)
 				break
-			case DataCacheTypeList:
+			case CacheTypeList:
 				tmp := []string{}
 				for _, val := range confVal.RelField {
 					if v[val].(string) != "" {

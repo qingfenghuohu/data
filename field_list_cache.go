@@ -5,11 +5,11 @@ import (
 	"strings"
 )
 
-type ListReal struct {
+type FieldListReal struct {
 	dck []DataCacheKey
 }
 
-func (real *ListReal) SetCacheData(rcd []RealCacheData) {
+func (real *FieldListReal) SetCacheData(rcd []RealCacheData) {
 	CacheData := map[string][]interface{}{}
 	Keys := map[string]map[int64][]string{}
 	for _, v := range rcd {
@@ -31,7 +31,7 @@ func (real *ListReal) SetCacheData(rcd []RealCacheData) {
 		}
 	}
 }
-func (real *ListReal) GetCacheData(res *Result) {
+func (real *FieldListReal) GetCacheData(res *Result) {
 	Keys := map[string][]string{}
 	for _, v := range real.dck {
 		if len(Keys[v.ConfigName]) == 0 {
@@ -46,7 +46,7 @@ func (real *ListReal) GetCacheData(res *Result) {
 		}
 	}
 }
-func (real *ListReal) GetRealData() []RealCacheData {
+func (real *FieldListReal) GetRealData() []RealCacheData {
 	var result []RealCacheData
 	realData := make(map[string]map[string][]DataCacheKey)
 	for _, v := range real.dck {
@@ -83,8 +83,8 @@ func (real *ListReal) GetRealData() []RealCacheData {
 	}
 	return result
 }
-func (real *ListReal) SetDataCacheKey(dck []DataCacheKey) {
+func (real *FieldListReal) SetDataCacheKey(dck []DataCacheKey) {
 	real.dck = dck
 }
-func (real *ListReal) DelCacheData() {
+func (real *FieldListReal) DelCacheData() {
 }

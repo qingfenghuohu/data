@@ -2,7 +2,7 @@ package data
 
 import (
 	"github.com/qingfenghuohu/tools/redis"
-	"strings"
+	"strconv"
 )
 
 type RelReal struct {
@@ -10,86 +10,61 @@ type RelReal struct {
 }
 
 func (real *RelReal) SetCacheData(rcd []RealCacheData) {
-	CacheData := map[string][]interface{}{}
-	Keys := map[string]map[int64][]string{}
+	Keys := map[string][]redis.HMSMD{}
 	for _, v := range rcd {
-		if len(CacheData[v.CacheKey.ConfigName]) == 0 {
-			CacheData[v.CacheKey.ConfigName] = []interface{}{}
-			Keys[v.CacheKey.ConfigName] = map[int64][]string{}
+		Hmsmd := redis.HMSMD{}
+		if len(Keys[v.CacheKey.ConfigName]) == 0 {
+			Keys[v.CacheKey.ConfigName] = []redis.HMSMD{}
 		}
-		if len(Keys[v.CacheKey.ConfigName][int64(v.CacheKey.LifeTime)]) == 0 {
-			Keys[v.CacheKey.ConfigName][int64(v.CacheKey.LifeTime)] = []string{}
-		}
-		CacheData[v.CacheKey.ConfigName] = append(CacheData[v.CacheKey.ConfigName], v.CacheKey.String())
-		CacheData[v.CacheKey.ConfigName] = append(CacheData[v.CacheKey.ConfigName], v.Result)
-		Keys[v.CacheKey.ConfigName][int64(v.CacheKey.LifeTime)] = append(Keys[v.CacheKey.ConfigName][int64(v.CacheKey.LifeTime)], v.CacheKey.String())
+		Hmsmd.Key = real.GetCacheKey(v.CacheKey)
+		Hmsmd.Data = map[string]interface{}{v.CacheKey.Params[1]: v.Result}
+		Hmsmd.Ttl = v.CacheKey.LifeTime
+		Keys[v.CacheKey.ConfigName] = append(Keys[v.CacheKey.ConfigName], Hmsmd)
 	}
-	for key, val := range CacheData {
-		redis.GetInstance(key).MSet(val...)
-		for k, v := range Keys[key] {
-			redis.GetInstance(key).Expire(k, v...)
-		}
+	for key, val := range Keys {
+		redis.GetInstance(key).HMSetMulti(val)
 	}
 }
 func (real *RelReal) GetCacheData(res *Result) {
-	Keys := map[string][]string{}
+	Keys := map[string]map[string][]string{}
 	for _, v := range real.dck {
 		if len(Keys[v.ConfigName]) == 0 {
-			Keys[v.ConfigName] = []string{}
+			Keys[v.ConfigName] = map[string][]string{}
 		}
-		Keys[v.ConfigName] = append(Keys[v.ConfigName], v.String())
+		if len(Keys[v.ConfigName][real.GetCacheKey(v)]) == 0 {
+			Keys[v.ConfigName][real.GetCacheKey(v)] = []string{}
+		}
+		if v.Params[1] != "" {
+			Keys[v.ConfigName][real.GetCacheKey(v)] = append(Keys[v.ConfigName][real.GetCacheKey(v)], v.Params[1])
+		}
 	}
 	for k, v := range Keys {
-		tmp := redis.GetInstance(k).MGet(v...)
+		tmp := redis.GetInstance(k).HMGetMulti(v)
 		for key, val := range tmp {
-			res.write(key, val)
+			for kk, vv := range val {
+				res.write(key+"_"+kk, vv)
+			}
 		}
 	}
 }
 func (real *RelReal) GetRealData() []RealCacheData {
 	var result []RealCacheData
-	realData := make(map[string]map[string][]DataCacheKey)
+	dataCacheKey := map[string]map[string][]DataCacheKey{}
+	models := map[string]ModelInfo{}
 	for _, v := range real.dck {
-		tmpKey := v.Model.DbName() + "_" + v.Model.TableName()
-		if ok := realData[tmpKey]; len(ok) <= 0 {
-			realData[tmpKey] = map[string][]DataCacheKey{}
+		TableName := v.Model.DbName() + "." + v.Model.TableName()
+		if len(dataCacheKey[TableName]) == 0 {
+			dataCacheKey[TableName] = map[string][]DataCacheKey{}
 		}
-		if ok := realData[tmpKey][v.Key]; len(ok) <= 0 {
-			realData[tmpKey][v.Key] = []DataCacheKey{}
+		if len(dataCacheKey[TableName][v.Key]) == 0 {
+			dataCacheKey[TableName][v.Key] = []DataCacheKey{}
 		}
-		realData[tmpKey][v.Key] = append(realData[tmpKey][v.Key], v)
+		dataCacheKey[TableName][v.Key] = append(dataCacheKey[TableName][v.Key], v)
+		models[TableName] = v.Model
 	}
-	keys := []string{}
-	var mm ModelInfo
-	var filed string
-	resData := make(map[string]interface{})
-	for _, value := range realData {
-		for _, val := range value {
-			for _, v := range val {
-				if v.Params[0] != "" {
-					keys = append(keys, v.Params[0])
-				}
-				filed = v.RelField[0]
-				mm = v.Model
-			}
-			mysqlFiled := Model(mm).InitField().fieldStruct[filed]
-			if mysqlFiled != "" {
-				param := "'" + strings.Join(keys, "','") + "'"
-				res := Model(mm).Where(mysqlFiled + " in(" + param + ")").Select()
-				for _, kv := range res {
-					kk := kv[filed].(string)
-					resData[kk] = kv
-				}
-			}
-			for _, v := range val {
-				ok := resData[v.Params[0]]
-				if ok == nil {
-					result = append(result, RealCacheData{CacheKey: v, Result: []map[string]interface{}{}})
-				} else {
-					result = append(result, RealCacheData{CacheKey: v, Result: ok})
-				}
-			}
-		}
+	for key, val := range dataCacheKey {
+		tmp := models[key].GetRealData(val)
+		result = append(result, tmp...)
 	}
 	return result
 }
@@ -107,4 +82,11 @@ func (real *RelReal) DelCacheData() {
 	for key, val := range keys {
 		redis.GetInstance(key).Delete(val...)
 	}
+}
+func (real *RelReal) GetCacheKey(key DataCacheKey) string {
+	return strconv.Itoa(key.Version) + ":" +
+		key.CType + ":" +
+		key.Model.DbName() + "." + key.Model.TableName() + ":" +
+		key.Key + ":" +
+		key.Params[0]
 }

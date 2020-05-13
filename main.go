@@ -105,11 +105,7 @@ func (m *m) InitField() *m {
 			m.field += " as " + modelType.Field(i).Name
 		}
 	}
-
 	return m
-}
-
-type singleton struct {
 }
 
 var connM map[string]*gorm.DB
@@ -130,7 +126,7 @@ func init() {
 			connS[dbName] = []*gorm.DB{}
 		}
 		idleNum, _ := strconv.Atoi(masterData["idleNum"].(string))
-		openNum, _ := strconv.Atoi(masterData["idleNum"].(string))
+		openNum, _ := strconv.Atoi(masterData["openNum"].(string))
 		connM[dbName], _ = gorm.Open(masterData["type"].(string), masterData["url"].(string))
 
 		if idleNum > 0 && openNum > 0 {

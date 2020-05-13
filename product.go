@@ -45,9 +45,9 @@ func (u *Product) DbToCacheKey(dbData []map[string]interface{}, beData []map[str
 
 func (u *Product) GetDataCacheKey() map[string]DataCacheKey {
 	result := make(map[string]DataCacheKey)
-	result[DataCacheTypeIds] = DataCacheKey{
-		Key:        DataCacheTypeIds,
-		CType:      DataCacheTypeIds,
+	result[CacheTypeIds] = DataCacheKey{
+		Key:        CacheTypeIds,
+		CType:      CacheTypeIds,
 		Model:      u,
 		LifeTime:   3600 * 24 * 30,
 		ResetTime:  0,
@@ -60,7 +60,7 @@ func (u *Product) GetDataCacheKey() map[string]DataCacheKey {
 	}
 	result[ProductModelDataCacheKeyState] = DataCacheKey{
 		Key:        ProductModelDataCacheKeyState,
-		CType:      DataCacheTypeList,
+		CType:      CacheTypeList,
 		LifeTime:   3600 * 24 * 30,
 		ResetTime:  0,
 		ResetCount: 0,
